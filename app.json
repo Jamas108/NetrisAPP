@@ -1,14 +1,13 @@
 {
   "expo": {
-    "name": "NetrisAPP",
+    "name": "Netris",
     "slug": "NetrisAPP",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/netrislogoo.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/netrislogoo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -17,9 +16,15 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/iconnetris.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyA47i_0RjaPDgL631WIAGA9QcRzWMQfhCo"
+        }
+      },
+      "package": "com.jamas10.NetrisApp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
