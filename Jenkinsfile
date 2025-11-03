@@ -2,155 +2,144 @@ pipeline {
     agent any
     
     environment {
-        ANDROID_HOME = '/opt/android-sdk'
-        GRADLE_USER_HOME = "${WORKSPACE}/.gradle"
+        // Sesuaikan dengan ID credential di Jenkins
+        EXPO_TOKEN = credentials('expo-token')  // atau ID lain yang Anda gunakan
     }
     
     stages {
         stage('Checkout') {
             steps {
-                echo '📥 Checking out code from GitHub...'
+                echo '📥 Checking out code...'
                 checkout scm
             }
         }
         
-        stage('Install Dependencies') {
-            agent {
-                docker {
-                    image 'react-native-builder:latest'
-                    args '-v $HOME/.npm:/root/.npm'
-                    reuseNode true
-                }
-            }
+        stage('Environment Check') {
             steps {
-                echo '📦 Installing npm dependencies...'
+                echo '========================================='
+                echo 'Environment Check'
+                echo '========================================='
+                sh '''
+                    echo "Node version:"
+                    node --version
+                    echo "NPM version:"
+                    npm --version
+                '''
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                echo '========================================='
+                echo 'Installing Dependencies'
+                echo '========================================='
                 sh 'npm ci'
             }
         }
         
-        stage('Run Tests') {
-            agent {
-                docker {
-                    image 'react-native-builder:latest'
-                    reuseNode true
-                }
-            }
+        stage('Install EAS CLI') {
             steps {
-                echo '🧪 Running tests...'
-                sh 'npm test -- --ci --coverage'
+                echo '========================================='
+                echo 'Installing EAS CLI'
+                echo '========================================='
+                sh 'npm install eas-cli'
             }
         }
         
-        stage('Lint Code') {
-            agent {
-                docker {
-                    image 'react-native-builder:latest'
-                    reuseNode true
-                }
-            }
+        stage('Verify Expo Login') {
             steps {
-                echo '🔍 Running ESLint...'
-                sh 'npm run lint || true'
+                echo '========================================='
+                echo 'Verifying Expo Login'
+                echo '========================================='
+                sh '''
+                    export EXPO_TOKEN="${EXPO_TOKEN}"
+                    npx eas-cli whoami
+                '''
             }
         }
         
-        stage('Build Android APK') {
-            agent {
-                docker {
-                    image 'react-native-builder:latest'
-                    args '-v $HOME/.gradle:/root/.gradle'
-                    reuseNode true
-                }
-            }
+        stage('Check EAS Configuration') {
             steps {
-                echo '🔨 Building Android APK with Expo...'
-                
-                withCredentials([
-                    file(credentialsId: 'android-keystore', variable: 'KEYSTORE_FILE'),
-                    string(credentialsId: 'keystore-password', variable: 'KEYSTORE_PASSWORD'),
-                    string(credentialsId: 'key-alias', variable: 'KEY_ALIAS')
-                ]) {
-                    sh '''
-                        # Expo prebuild untuk generate native code
-                        npx expo prebuild --platform android --clean
-                        
-                        # Copy keystore ke android/app
-                        mkdir -p android/app
-                        cp $KEYSTORE_FILE android/app/my-release-key.keystore
-                        
-                        # Update gradle.properties
-                        cat >> android/gradle.properties <<EOF
-MYAPP_RELEASE_STORE_FILE=my-release-key.keystore
-MYAPP_RELEASE_KEY_ALIAS=${KEY_ALIAS}
-MYAPP_RELEASE_STORE_PASSWORD=${KEYSTORE_PASSWORD}
-MYAPP_RELEASE_KEY_PASSWORD=${KEYSTORE_PASSWORD}
-EOF
-                        
-                        # Build APK
-                        cd android
-                        ./gradlew assembleRelease --no-daemon
-                        
-                        # Copy APK ke workspace root
-                        cp app/build/outputs/apk/release/app-release.apk ../mydevopsapp.apk
-                    '''
+                echo '========================================='
+                echo 'Checking EAS Configuration'
+                echo '========================================='
+                script {
+                    def hasProjectId = sh(
+                        script: 'grep -q "projectId" app.json && echo "true" || echo "false"',
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (hasProjectId == "false") {
+                        echo "⚠️  Project ID not found in app.json"
+                        echo "Please run 'eas init' locally first!"
+                        error("EAS project not configured")
+                    } else {
+                        echo "✅ Project ID found in app.json"
+                        sh 'grep "projectId" app.json'
+                    }
                 }
             }
         }
         
-        stage('Archive APK') {
+        stage('Build Preview APK') {
             steps {
-                echo '📦 Archiving APK artifact...'
-                archiveArtifacts artifacts: 'mydevopsapp.apk', fingerprint: true
+                echo '========================================='
+                echo 'Building Preview APK'
+                echo '========================================='
+                sh '''
+                    export EXPO_TOKEN="${EXPO_TOKEN}"
+                    npx eas-cli build --platform android --profile preview --non-interactive --no-wait
+                '''
             }
         }
         
-        stage('Build AAB for Play Store') {
-            agent {
-                docker {
-                    image 'react-native-builder:latest'
-                    args '-v $HOME/.gradle:/root/.gradle'
-                    reuseNode true
-                }
+        stage('Build Production AAB') {
+            when {
+                branch 'main'
             }
             steps {
-                echo '📦 Building Android App Bundle (AAB)...'
-                
-                withCredentials([
-                    file(credentialsId: 'android-keystore', variable: 'KEYSTORE_FILE'),
-                    string(credentialsId: 'keystore-password', variable: 'KEYSTORE_PASSWORD'),
-                    string(credentialsId: 'key-alias', variable: 'KEY_ALIAS')
-                ]) {
-                    sh '''
-                        cd android
-                        ./gradlew bundleRelease --no-daemon
-                        cp app/build/outputs/bundle/release/app-release.aab ../mydevopsapp.aab
-                    '''
-                }
-                
-                archiveArtifacts artifacts: 'mydevopsapp.aab', fingerprint: true
+                echo '========================================='
+                echo 'Building Production AAB'
+                echo '========================================='
+                sh '''
+                    export EXPO_TOKEN="${EXPO_TOKEN}"
+                    npx eas-cli build --platform android --profile production --non-interactive --no-wait
+                '''
             }
         }
         
-        stage('Prepare for Play Store') {
+        stage('Get Build Status') {
             steps {
-                echo '🚀 AAB ready for Play Store upload!'
-                echo 'Download artifact: mydevopsapp.aab'
-                echo '📝 Next: Manual upload to Google Play Console'
+                echo '========================================='
+                echo 'Build Status'
+                echo '========================================='
+                sh '''
+                    export EXPO_TOKEN="${EXPO_TOKEN}"
+                    echo "Recent builds:"
+                    npx eas-cli build:list --platform android --limit 5
+                    echo ""
+                    echo "Check full status: https://expo.dev"
+                '''
             }
         }
     }
     
     post {
         success {
-            echo '✅ Pipeline completed successfully!'
-            echo '📱 APK: mydevopsapp.apk'
-            echo '📦 AAB: mydevopsapp.aab'
+            echo '✅ ========================================='
+            echo '✅ Pipeline Completed Successfully!'
+            echo '✅ ========================================='
+            echo '📱 View builds: https://expo.dev/accounts/jamas5758/projects'
+            echo '📥 Download builds from Expo dashboard'
         }
         failure {
-            echo '❌ Pipeline failed!'
+            echo '❌ ========================================='
+            echo '❌ Pipeline Failed!'
+            echo '❌ ========================================='
+            echo 'Check logs above for details'
         }
         always {
-            cleanWs()
+            echo '🧹 Cleaning up...'
         }
     }
 }
