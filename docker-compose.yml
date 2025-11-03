@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  netris-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: netris-expo-app
+    ports:
+      - "8081:8081"    # Metro bundler
+      - "19000:19000"  # Expo Dev Server
+      - "19001:19001"  # Expo Dev Server (secure)
+      - "19002:19002"  # Expo Dev Tools
+    volumes:
+      # Mount source code untuk hot reload
+      - .:/app
+      # Exclude node_modules dari sync (menggunakan dari container)
+      - /app/node_modules
+      # Exclude build folders
+      - /app/.expo
+      - /app/android
+      - /app/ios
+    environment:
+      # Expo environment variables
+      - EXPO_DEVTOOLS_LISTEN_ADDRESS=0.0.0.0
+      - REACT_NATIVE_PACKAGER_HOSTNAME=0.0.0.0
+      - NODE_ENV=development
+      # Untuk CI/CD, uncomment dan set token
+      # - EXPO_TOKEN=${EXPO_TOKEN}
+    stdin_open: true
+    tty: true
+    networks:
+      - netris-network
+    restart: unless-stopped
+    # Resource limits (opsional, sesuaikan dengan kebutuhan)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  # Service tambahan untuk CI/CD build (opsional)
+  netris-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: netris-builder
+    environment:
+      - EXPO_TOKEN=${EXPO_TOKEN}
+      - NODE_ENV=production
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: echo "Builder ready. Use 'docker-compose run netris-builder npm run build:android'"
+    networks:
+      - netris-network
+    profiles:
+      - build
+
+networks:
+  netris-network:
+    driver: bridge
+
+# Volume untuk persist data jika diperlukan
+volumes:
+  node_modules:
+    driver: local
