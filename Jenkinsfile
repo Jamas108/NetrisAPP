@@ -1,11 +1,15 @@
 pipeline {
-    agent any
-    
-    environment {
-        // Sesuaikan dengan ID credential di Jenkins
-        EXPO_TOKEN = credentials('expo-token')  // atau ID lain yang Anda gunakan
+    agent {
+        docker {
+            image 'netrisapp-netris-app:latest'  
+            args '-u root:root -v /tmp:/tmp' 
+        }
     }
     
+    environment {
+        EXPO_TOKEN = credentials('expo-token') // Credential di Jenkins
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -13,7 +17,7 @@ pipeline {
                 checkout scm
             }
         }
-        
+
         stage('Environment Check') {
             steps {
                 echo '========================================='
@@ -27,7 +31,7 @@ pipeline {
                 '''
             }
         }
-        
+
         stage('Install Dependencies') {
             steps {
                 echo '========================================='
@@ -36,7 +40,7 @@ pipeline {
                 sh 'npm ci'
             }
         }
-        
+
         stage('Install EAS CLI') {
             steps {
                 echo '========================================='
@@ -45,7 +49,7 @@ pipeline {
                 sh 'npm install eas-cli'
             }
         }
-        
+
         stage('Verify Expo Login') {
             steps {
                 echo '========================================='
@@ -57,7 +61,7 @@ pipeline {
                 '''
             }
         }
-        
+
         stage('Check EAS Configuration') {
             steps {
                 echo '========================================='
@@ -80,7 +84,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Build Preview APK') {
             steps {
                 echo '========================================='
@@ -92,7 +96,7 @@ pipeline {
                 '''
             }
         }
-        
+
         stage('Build Production AAB') {
             when {
                 branch 'main'
@@ -107,7 +111,7 @@ pipeline {
                 '''
             }
         }
-        
+
         stage('Get Build Status') {
             steps {
                 echo '========================================='
@@ -123,7 +127,7 @@ pipeline {
             }
         }
     }
-    
+
     post {
         success {
             echo '✅ ========================================='
